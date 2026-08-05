@@ -7,9 +7,9 @@ export default function FormAbsensi({ onBack }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // State Kamera & Waktu
+  // State Kamera & Waktu (DI-SET DEFAULT KE 'user' UNTUK KAMERA DEPAN)
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode, setFacingMode] = useState('environment'); // 'user' (depan) atau 'environment' (belakang)
+  const [facingMode] = useState('user'); 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -33,46 +33,35 @@ export default function FormAbsensi({ onBack }) {
   ];
 
   // =====================================
-  // LOGIC KAMERA & WATERMARK CANVAS
+  // LOGIC KAMERA (AUTO BYPASS KE DEPAN)
   // =====================================
-  const startCamera = async (type, mode = facingMode) => {
+  const startCamera = async (type) => {
     if (type) setActiveType(type);
     setCapturedPhoto(null);
     
-    // Matikan stream yang lama sebelum buka yang baru (buat fitur ganti kamera)
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
 
     try {
-      // Percobaan pertama: Buka dengan spesifik facingMode (Depan/Belakang)
+      // Auto bypass langsung minta kamera depan ('user')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode }
+        video: { facingMode: 'user' }
       });
       setStream(mediaStream);
-      setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
-      console.warn("Gagal membuka spesifik mode kamera, mencoba mode fallback...", err);
-      // Fallback: Jika error (biasanya karena limitasi hardware/browser hp minta kamera depan), 
-      // kita panggil kamera default apa saja tanpa aturan facingMode.
+      console.warn("Gagal membuka kamera depan spesifik, mencoba fallback default...", err);
       try {
         const fallbackStream = await navigator.mediaDevices.getUserMedia({
           video: true
         });
         setStream(fallbackStream);
-        setFacingMode(mode); // Tetap simpan state untuk kebutuhan canvas mirror
         setIsCameraActive(true);
       } catch (fallbackErr) {
         alert(`Kamera Gagal Diakses!\n\nAlasan: ${fallbackErr.name} - ${fallbackErr.message}\n\nSolusi: Klik ikon Gembok (🔒) di URL bar atas, pilih 'Permissions / Izin', dan pastikan Kamera di-Set ke 'Allow / Izinkan'.`);
       }
     }
-  };
-
-  // Fungsi Toggle Kamera Depan/Belakang
-  const toggleCamera = () => {
-    const newMode = facingMode === 'environment' ? 'user' : 'environment';
-    startCamera(activeType, newMode);
   };
 
   useEffect(() => {
@@ -98,19 +87,15 @@ export default function FormAbsensi({ onBack }) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // Jika kamera depan, flip canvas secara horizontal biar gak kayak cermin kebalik
-      if (facingMode === 'user') {
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-      }
+      // Karena pakai kamera depan, flip canvas secara horizontal biar hasil foto nggak terbalik
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
       
       // 1. Gambar frame video asli ke canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Kembalikan transformasi canvas ke normal sebelum menggambar watermark teks biar gak kebalik
-      if (facingMode === 'user') {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-      }
+      // Kembalikan transformasi canvas ke normal sebelum menggambar watermark teks
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       
       // 2. Gambar Background Watermark (Hitam transparan)
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
@@ -127,11 +112,9 @@ export default function FormAbsensi({ onBack }) {
           logoImg.onerror = reject;
         });
 
-        // Draw logo (X, Y, Lebar, Tinggi) 
         ctx.drawImage(logoImg, 35, canvas.height - 125, 200, 40); 
       } catch (err) {
         console.error("Gagal load logo watermark", err);
-        // Fallback teks kalau gambar gagal load
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 20px Arial";
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
@@ -202,7 +185,7 @@ export default function FormAbsensi({ onBack }) {
         </button>
 
         {/* =========================================================
-            OVERLAY KAMERA ESTETIK (Model POPUP Anti-Scroll)
+            OVERLAY KAMERA ESTETIK (Model POPUP Anti-Scroll - AUTO DEPAN)
             ========================================================= */}
         {isCameraActive && (
           <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
@@ -210,31 +193,22 @@ export default function FormAbsensi({ onBack }) {
               
               {/* Header Action di dalam Popup */}
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
-                <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[60%]">
-                  Absen {activeType}
+                <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[70%]">
+                  Absen {activeType} (Kamera Depan)
                 </span>
                 
-                <div className="flex gap-2">
-                  {/* Tombol Rotate/Flip Camera */}
-                  <button onClick={toggleCamera} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-full transition-colors">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                  {/* Tombol Close */}
-                  <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
+                <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
               </div>
 
-              {/* Viewfinder Kamera */}
+              {/* Viewfinder Kamera (Di-mirror otomatis biar pas selfie) */}
               <div className="relative w-full aspect-[3/4] max-h-[60vh] bg-black flex items-center justify-center overflow-hidden mt-16">
                 <video 
                   ref={videoRef} 
                   autoPlay 
                   playsInline 
-                  className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
+                  className="w-full h-full object-cover scale-x-[-1]" 
                 />
                 
                 {/* Overlay Efek Scanner Bracket */}
@@ -288,7 +262,7 @@ export default function FormAbsensi({ onBack }) {
               <img src={capturedPhoto} alt="Hasil Absen" className="w-full h-auto max-h-full object-contain" />
             </div>
             <div className="flex gap-4 w-full max-w-sm">
-              <button onClick={() => startCamera(activeType, facingMode)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors shadow-lg">
+              <button onClick={() => startCamera(activeType)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors shadow-lg">
                 Foto Ulang
               </button>
               <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
