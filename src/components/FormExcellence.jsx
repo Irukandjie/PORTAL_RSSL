@@ -4,7 +4,7 @@ export default function FormExcellence({ onBack }) {
   // State untuk 1 foto penampilan (nyimpen Data URL dari kamera)
   const [file, setFile] = useState(null);
   
-  // State untuk 3 absensi briefing (Opsional)
+  // State untuk 3 absensi briefing (Opsional) - Topik dihapus
   const [briefings, setBriefings] = useState([
     { tanggal: '', foto: null },
     { tanggal: '', foto: null },
@@ -26,7 +26,7 @@ export default function FormExcellence({ onBack }) {
   // =====================================
 
   const startCamera = async (mode = facingMode) => {
-    // Stop stream lama jika ada sebelum membuka yang baru
+    // Matikan stream lama jika ada (buat pindah kamera)
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -80,7 +80,7 @@ export default function FormExcellence({ onBack }) {
       
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-
+      
       // Balik gambar secara horizontal (mirror) jika pakai kamera depan
       if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
@@ -89,12 +89,13 @@ export default function FormExcellence({ onBack }) {
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Kembalikan ke normal untuk watermark (kalau ada) supaya nggak terbalik
+      // Kembalikan ke normal untuk render selanjutnya (kalau butuh watermark dll)
       if (facingMode === 'user') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
       setFile(photoDataUrl);
       stopCamera();
     }
@@ -113,14 +114,13 @@ export default function FormExcellence({ onBack }) {
   const handleBriefingFileChange = (index, e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!allowedTypes.includes(selectedFile.type)) {
-        alert('Mohon unggah file berupa Gambar (JPG/PNG) atau Dokumen (PDF/DOC).');
+      if (!selectedFile.type.startsWith('image/')) {
+        alert('Mohon unggah file berupa gambar (JPG/PNG).');
         e.target.value = null;
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
-        alert('Ukuran file terlalu besar! Maksimal 5MB.');
+        alert('Ukuran gambar terlalu besar! Maksimal 5MB.');
         e.target.value = null;
         return;
       }
@@ -134,9 +134,7 @@ export default function FormExcellence({ onBack }) {
   useEffect(() => {
     return () => {
       briefings.forEach(b => {
-        if (b.foto && b.foto.type.startsWith('image/')) {
-          URL.revokeObjectURL(b.foto.preview);
-        }
+        if (b.foto) URL.revokeObjectURL(b.foto);
       });
     };
   }, [briefings]);
@@ -161,7 +159,7 @@ export default function FormExcellence({ onBack }) {
     });
 
     if (isBriefingIncomplete) {
-      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Dokumen Bukti terisi semua!');
+      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Foto Bukti terisi semua!');
       return;
     }
     
@@ -230,7 +228,6 @@ export default function FormExcellence({ onBack }) {
                 Foto Penampilan Kerja
               </div>
               
-              {/* TOMBOL ACTION (Ganti Kamera & Close) */}
               <div className="flex items-center gap-3">
                 {/* Tombol Flip Camera */}
                 <button onClick={toggleCamera} className="text-white bg-white/20 hover:bg-white/40 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
@@ -239,7 +236,7 @@ export default function FormExcellence({ onBack }) {
                   </svg>
                 </button>
                 {/* Tombol Close */}
-                <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-rose-500 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300 shadow-sm">
+                <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-emerald-600 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -355,7 +352,7 @@ export default function FormExcellence({ onBack }) {
                         
                         {/* Tombol Pill Estetik */}
                         <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-white group-hover:bg-emerald-600 text-emerald-600 group-hover:text-white font-bold rounded-xl transition-all duration-300 shadow-sm uppercase tracking-wider text-[11px] border border-emerald-200 group-hover:border-emerald-600">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
                           Buka Kamera
                         </div>
 
