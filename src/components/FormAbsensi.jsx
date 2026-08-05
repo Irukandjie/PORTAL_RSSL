@@ -9,6 +9,7 @@ export default function FormAbsensi({ onBack }) {
 
   // State Kamera & Waktu
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [facingMode, setFacingMode] = useState('environment'); // 'user' (depan) atau 'environment' (belakang)
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -34,18 +35,31 @@ export default function FormAbsensi({ onBack }) {
   // =====================================
   // LOGIC KAMERA & WATERMARK CANVAS
   // =====================================
-  const startCamera = async (type) => {
-    setActiveType(type);
+  const startCamera = async (type, mode = facingMode) => {
+    if (type) setActiveType(type);
     setCapturedPhoto(null);
+    
+    // Matikan stream yang lama sebelum buka yang baru (buat fitur ganti kamera)
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: mode }
       });
       setStream(mediaStream);
+      setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
       alert("Kamera tidak dapat diakses. Pastikan izin kamera aktif.");
     }
+  };
+
+  // Fungsi Toggle Kamera Depan/Belakang
+  const toggleCamera = () => {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(null, newMode);
   };
 
   useEffect(() => {
@@ -71,18 +85,28 @@ export default function FormAbsensi({ onBack }) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
+      // Jika kamera depan, flip canvas secara horizontal biar gak kayak cermin kebalik
+      if (facingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      
       // 1. Gambar frame video asli ke canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
+      // Kembalikan transformasi canvas ke normal sebelum menggambar watermark
+      if (facingMode === 'user') {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      
       // 2. Gambar Background Watermark (Hitam transparan)
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(20, canvas.height - 140, 320, 120); // Disesuaikan tingginya buat logo
+      ctx.fillRect(20, canvas.height - 140, 320, 120); 
       
       // 3. Load dan Gambar Logo RS
-      // Pake Promise biar canvas nunggu gambarnya keload dulu sebelum di-draw
       try {
         const logoImg = new Image();
-        logoImg.crossOrigin = "Anonymous"; // Biar ga kena error CORS pas save toDataURL
+        logoImg.crossOrigin = "Anonymous"; 
         logoImg.src = 'https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png';
         
         await new Promise((resolve, reject) => {
@@ -90,33 +114,27 @@ export default function FormAbsensi({ onBack }) {
           logoImg.onerror = reject;
         });
 
-        // Draw logo (X, Y, Lebar, Tinggi) -> Disesuaikan posisinya
         ctx.drawImage(logoImg, 35, canvas.height - 125, 200, 40); 
       } catch (err) {
         console.error("Gagal load logo watermark", err);
-        // Fallback teks kalau gambar gagal load
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 20px Arial";
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
       }
       
       // 4. Tambahkan Teks Watermark Lainnya
-      // Tanggal
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "14px Arial";
       ctx.fillText(dateString, 35, canvas.height - 70);
       
-      // Jam
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 16px Arial";
       ctx.fillText(timeString, 35, canvas.height - 50);
 
-      // Jenis Absen
-      ctx.fillStyle = "#38bdf8"; // emerald/cyan
+      ctx.fillStyle = "#38bdf8"; 
       ctx.font = "bold 14px Arial";
       ctx.fillText(`STATUS: ABSEN ${activeType.toUpperCase()}`, 35, canvas.height - 30);
       
-      // Convert ke Data URL (JPEG)
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
       setCapturedPhoto(photoDataUrl);
       stopCamera();
@@ -175,12 +193,30 @@ export default function FormAbsensi({ onBack }) {
             <div className="absolute top-6 left-6 text-white font-bold bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-white/30 uppercase tracking-widest text-sm">
               Absen {activeType}
             </div>
-            <button onClick={stopCamera} className="absolute top-6 right-6 text-white bg-white/20 hover:bg-rose-500 p-3 rounded-full backdrop-blur-sm transition-all duration-300">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            
+            {/* Header Buttons */}
+            <div className="absolute top-6 right-6 flex items-center gap-3">
+              {/* TOMBOL GANTI KAMERA (Hanya muncul di Mobile/Device yang support multiple camera) */}
+              <button onClick={toggleCamera} className="text-white bg-white/20 hover:bg-white/40 p-3 rounded-full backdrop-blur-sm transition-all duration-300">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+
+              {/* Tombol Close */}
+              <button onClick={stopCamera} className="text-white bg-rose-500/80 hover:bg-rose-600 p-3 rounded-full backdrop-blur-sm transition-all duration-300 shadow-lg shadow-rose-500/30">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
 
             <div className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/20">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-105" />
+              {/* Mirror effect untuk kamera depan */}
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
+              />
               
               {/* Overlay Watermark (UI Preview) */}
               <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-white shadow-lg">
@@ -226,7 +262,7 @@ export default function FormAbsensi({ onBack }) {
               <img src={capturedPhoto} alt="Hasil Absen" className="w-full h-auto object-cover" />
             </div>
             <div className="flex gap-4 w-full max-w-sm">
-              <button onClick={() => startCamera(activeType)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors">
+              <button onClick={() => startCamera(activeType, facingMode)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors">
                 Foto Ulang
               </button>
               <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
