@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 export default function FormExcellence({ onBack }) {
-  // State untuk 1 foto penampilan (nyimpen Data URL dari kamera)
   const [file, setFile] = useState(null);
   
-  // State untuk 3 absensi briefing (Opsional) - Topik dihapus
   const [briefings, setBriefings] = useState([
     { tanggal: '', foto: null },
     { tanggal: '', foto: null },
@@ -14,9 +12,8 @@ export default function FormExcellence({ onBack }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // State khusus Kamera (Photobooth Mode)
   const [isCameraActive, setIsCameraActive] = useState(false); 
-  const [facingMode, setFacingMode] = useState('environment'); // Default kamera belakang
+  const [facingMode, setFacingMode] = useState('environment'); 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -26,7 +23,6 @@ export default function FormExcellence({ onBack }) {
   // =====================================
 
   const startCamera = async (mode = facingMode) => {
-    // Matikan stream lama jika ada (buat pindah kamera)
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -39,8 +35,9 @@ export default function FormExcellence({ onBack }) {
       setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
-      alert("Gagal mengakses kamera. Pastikan browser Anda memiliki izin untuk menggunakan kamera.");
-      console.error(err);
+      // UPDATE: Menampilkan error bawaan sistem biar gampang di-debug
+      alert(`Kamera Gagal Diakses!\n\nAlasan: ${err.name} - ${err.message}\n\nSolusi: Klik ikon Gembok (🔒) di URL bar atas, pilih 'Permissions / Izin', dan pastikan Kamera di-Set ke 'Allow / Izinkan'.`);
+      console.error("Error Camera:", err);
     }
   };
 
@@ -80,8 +77,7 @@ export default function FormExcellence({ onBack }) {
       
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
-      // Balik gambar secara horizontal (mirror) jika pakai kamera depan
+
       if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -89,13 +85,11 @@ export default function FormExcellence({ onBack }) {
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Kembalikan ke normal untuk render selanjutnya (kalau butuh watermark dll)
       if (facingMode === 'user') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
       setFile(photoDataUrl);
       stopCamera();
     }
@@ -114,13 +108,14 @@ export default function FormExcellence({ onBack }) {
   const handleBriefingFileChange = (index, e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      if (!selectedFile.type.startsWith('image/')) {
-        alert('Mohon unggah file berupa gambar (JPG/PNG).');
+      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(selectedFile.type)) {
+        alert('Mohon unggah file berupa Gambar (JPG/PNG) atau Dokumen (PDF/DOC).');
         e.target.value = null;
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
-        alert('Ukuran gambar terlalu besar! Maksimal 5MB.');
+        alert('Ukuran file terlalu besar! Maksimal 5MB.');
         e.target.value = null;
         return;
       }
@@ -130,11 +125,12 @@ export default function FormExcellence({ onBack }) {
     }
   };
 
-  // Bersihkan object URL saat komponen unmount untuk menghindari memory leak
   useEffect(() => {
     return () => {
       briefings.forEach(b => {
-        if (b.foto) URL.revokeObjectURL(b.foto);
+        if (b.foto && b.foto.type.startsWith('image/')) {
+          URL.revokeObjectURL(b.foto.preview);
+        }
       });
     };
   }, [briefings]);
@@ -145,13 +141,11 @@ export default function FormExcellence({ onBack }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Validasi Foto Penampilan (Wajib 1 slot terisi)
     if (!file) {
       alert('Mohon jepret foto Penampilan Kerja Anda secara live sebelum mengirim form!');
       return;
     }
 
-    // Validasi Kelengkapan Briefing (Opsional, tapi kalau diisi harus lengkap)
     let isBriefingIncomplete = false;
     briefings.forEach(b => {
       const isPartiallyFilled = (b.tanggal || b.foto) && !(b.tanggal && b.foto);
@@ -159,12 +153,11 @@ export default function FormExcellence({ onBack }) {
     });
 
     if (isBriefingIncomplete) {
-      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Foto Bukti terisi semua!');
+      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Dokumen Bukti terisi semua!');
       return;
     }
     
     setIsSubmitting(true);
-    // Simulasi loading ngirim data ke server 2 detik
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSuccess(true);
@@ -205,7 +198,6 @@ export default function FormExcellence({ onBack }) {
     <div className="min-h-screen bg-slate-50 py-10 animate-fade-in-up">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         
-        {/* Navigasi Back */}
         <button 
           onClick={() => { stopCamera(); onBack(); }}
           className="group flex items-center gap-2 mb-8 text-slate-500 hover:text-emerald-600 transition-colors font-medium"
@@ -216,33 +208,27 @@ export default function FormExcellence({ onBack }) {
           Kembali
         </button>
 
-        {/* =========================================================
-            OVERLAY KAMERA ESTETIK (Glassmorphism & Scanner UI Emerald)
-            ========================================================= */}
+        {/* OVERLAY KAMERA */}
         {isCameraActive && (
           <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in">
             
-            {/* Header Kamera */}
             <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center bg-gradient-to-b from-slate-900/80 to-transparent z-10">
               <div className="text-white font-semibold tracking-wide bg-emerald-600/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-emerald-500/50">
                 Foto Penampilan Kerja
               </div>
               
               <div className="flex items-center gap-3">
-                {/* Tombol Flip Camera */}
                 <button onClick={toggleCamera} className="text-white bg-white/20 hover:bg-white/40 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </button>
-                {/* Tombol Close */}
-                <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-emerald-600 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
+                <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-rose-500 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300 shadow-sm">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             </div>
 
-            {/* Viewfinder Kamera */}
             <div className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] sm:aspect-video mx-auto bg-black rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(16,185,129,0.15)] ring-1 ring-white/10 mt-10">
               <video 
                 ref={videoRef} 
@@ -251,14 +237,12 @@ export default function FormExcellence({ onBack }) {
                 className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
               />
               
-              {/* Overlay Efek Scanner / Bracket Kamera (Emerald) */}
               <div className="absolute inset-0 pointer-events-none p-6">
                 <div className="w-full h-full relative">
                   <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-emerald-500 rounded-tl-2xl opacity-80"></div>
                   <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-emerald-500 rounded-tr-2xl opacity-80"></div>
                   <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-emerald-500 rounded-bl-2xl opacity-80"></div>
                   <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-emerald-500 rounded-br-2xl opacity-80"></div>
-                  
                   <div className="absolute inset-0 flex items-center justify-center opacity-50">
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,1)]"></div>
                   </div>
@@ -266,7 +250,6 @@ export default function FormExcellence({ onBack }) {
               </div>
             </div>
 
-            {/* Tombol Jepret (iOS Shutter Style) */}
             <div className="mt-12 flex flex-col items-center">
               <button 
                 onClick={capturePhoto} 
@@ -286,7 +269,6 @@ export default function FormExcellence({ onBack }) {
         {/* Card Form */}
         <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200">
           
-          {/* Header Form */}
           <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-6">
             <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
               <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -302,7 +284,6 @@ export default function FormExcellence({ onBack }) {
 
           <form onSubmit={handleSubmit} className="space-y-10">
             
-            {/* SECTION 1: FOTO PENAMPILAN (WAJIB - KAMERA ONLY) */}
             <section>
               <div className="mb-6">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -324,7 +305,6 @@ export default function FormExcellence({ onBack }) {
                   <div className={`relative h-64 flex justify-center items-center px-6 py-6 border-2 border-dashed rounded-2xl transition-all duration-300 overflow-hidden ${file ? 'border-emerald-500 bg-black' : 'border-slate-300 group-hover:border-emerald-400 group-hover:bg-emerald-50/30 group-hover:shadow-[0_4px_20px_rgba(16,185,129,0.05)]'}`}>
                     
                     {file ? (
-                      /* Mode Preview Jepretan */
                       <>
                         <img src={file} alt={`Hasil Jepretan`} className="absolute inset-0 w-full h-full object-cover opacity-90" />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 hover:opacity-100 transition-opacity">
@@ -335,27 +315,19 @@ export default function FormExcellence({ onBack }) {
                         </div>
                       </>
                     ) : (
-                      /* Mode Belum Dijepret (ESTETIK UPGRADE) */
                       <div className="space-y-5 text-center transform transition-transform duration-300 group-hover:scale-105">
-                        
                         <div className="relative w-20 h-20 mx-auto">
-                          {/* Efek Pinggiran Berkedip (Pulse Ring) */}
                           <div className="absolute inset-0 bg-emerald-200 rounded-full animate-ping opacity-60"></div>
-                          
-                          {/* Ikon Kamera Utama (Scanner Style) */}
                           <div className="relative w-full h-full bg-gradient-to-tr from-white to-emerald-50 text-emerald-500 rounded-full flex items-center justify-center shadow-md border-2 border-emerald-100 group-hover:border-emerald-300 group-hover:text-emerald-600 transition-all duration-300">
                             <svg className="w-9 h-9 transform group-hover:rotate-12 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8V6a2 2 0 012-2h2M3 16v2a2 2 0 002 2h2M21 8V6a2 2 0 00-2-2h-2M21 16v2a2 2 0 01-2 2h-2M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                           </div>
                         </div>
-                        
-                        {/* Tombol Pill Estetik */}
                         <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-white group-hover:bg-emerald-600 text-emerald-600 group-hover:text-white font-bold rounded-xl transition-all duration-300 shadow-sm uppercase tracking-wider text-[11px] border border-emerald-200 group-hover:border-emerald-600">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
                           Buka Kamera
                         </div>
-
                       </div>
                     )}
                   </div>
@@ -389,7 +361,6 @@ export default function FormExcellence({ onBack }) {
                         />
                       </div>
                       
-                      {/* UPLOAD FOTO/DOKUMEN BUKTI BRIEFING */}
                       <div className="pt-2">
                         <label className="block text-xs font-bold text-slate-600 mb-2">Dokumen Bukti Kehadiran</label>
                         {briefing.foto ? (
@@ -446,7 +417,6 @@ export default function FormExcellence({ onBack }) {
               </div>
             </section>
 
-            {/* Submit Button */}
             <div className="pt-8 border-t border-slate-100">
               <button 
                 type="submit" 
