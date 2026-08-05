@@ -4,7 +4,7 @@ export default function FormExcellence({ onBack }) {
   // State untuk 1 foto penampilan (nyimpen Data URL dari kamera)
   const [file, setFile] = useState(null);
   
-  // State untuk 3 absensi briefing (Opsional) - Topik dihapus
+  // State untuk 3 absensi briefing (Opsional)
   const [briefings, setBriefings] = useState([
     { tanggal: '', foto: null },
     { tanggal: '', foto: null },
@@ -16,6 +16,7 @@ export default function FormExcellence({ onBack }) {
 
   // State khusus Kamera (Photobooth Mode)
   const [isCameraActive, setIsCameraActive] = useState(false); 
+  const [facingMode, setFacingMode] = useState('environment'); // Default kamera belakang
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -24,17 +25,28 @@ export default function FormExcellence({ onBack }) {
   // LOGIC KAMERA REAL-TIME (WEBRTC)
   // =====================================
 
-  const startCamera = async () => {
+  const startCamera = async (mode = facingMode) => {
+    // Stop stream lama jika ada sebelum membuka yang baru
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: mode }
       });
       setStream(mediaStream);
+      setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
       alert("Gagal mengakses kamera. Pastikan browser Anda memiliki izin untuk menggunakan kamera.");
       console.error(err);
     }
+  };
+
+  const toggleCamera = () => {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(newMode);
   };
 
   useEffect(() => {
@@ -64,15 +76,25 @@ export default function FormExcellence({ onBack }) {
     if (videoRef.current && canvasRef.current && isCameraActive) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
       
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+
+      // Balik gambar secara horizontal (mirror) jika pakai kamera depan
+      if (facingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       
-      const context = canvas.getContext('2d');
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Kembalikan ke normal untuk watermark (kalau ada) supaya nggak terbalik
+      if (facingMode === 'user') {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
       
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
       setFile(photoDataUrl);
       stopCamera();
     }
@@ -91,13 +113,14 @@ export default function FormExcellence({ onBack }) {
   const handleBriefingFileChange = (index, e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      if (!selectedFile.type.startsWith('image/')) {
-        alert('Mohon unggah file berupa gambar (JPG/PNG).');
+      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(selectedFile.type)) {
+        alert('Mohon unggah file berupa Gambar (JPG/PNG) atau Dokumen (PDF/DOC).');
         e.target.value = null;
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
-        alert('Ukuran gambar terlalu besar! Maksimal 5MB.');
+        alert('Ukuran file terlalu besar! Maksimal 5MB.');
         e.target.value = null;
         return;
       }
@@ -111,7 +134,9 @@ export default function FormExcellence({ onBack }) {
   useEffect(() => {
     return () => {
       briefings.forEach(b => {
-        if (b.foto) URL.revokeObjectURL(b.foto);
+        if (b.foto && b.foto.type.startsWith('image/')) {
+          URL.revokeObjectURL(b.foto.preview);
+        }
       });
     };
   }, [briefings]);
@@ -136,7 +161,7 @@ export default function FormExcellence({ onBack }) {
     });
 
     if (isBriefingIncomplete) {
-      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Foto Bukti terisi semua!');
+      alert('Jika Anda mengisi data briefing, pastikan Tanggal dan Dokumen Bukti terisi semua!');
       return;
     }
     
@@ -204,9 +229,20 @@ export default function FormExcellence({ onBack }) {
               <div className="text-white font-semibold tracking-wide bg-emerald-600/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-emerald-500/50">
                 Foto Penampilan Kerja
               </div>
-              <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-emerald-600 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              
+              {/* TOMBOL ACTION (Ganti Kamera & Close) */}
+              <div className="flex items-center gap-3">
+                {/* Tombol Flip Camera */}
+                <button onClick={toggleCamera} className="text-white bg-white/20 hover:bg-white/40 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                {/* Tombol Close */}
+                <button onClick={stopCamera} className="text-slate-300 hover:text-white bg-slate-800/80 hover:bg-rose-500 p-2.5 rounded-full backdrop-blur-sm transition-all duration-300 shadow-sm">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
 
             {/* Viewfinder Kamera */}
@@ -215,7 +251,7 @@ export default function FormExcellence({ onBack }) {
                 ref={videoRef} 
                 autoPlay 
                 playsInline 
-                className="w-full h-full object-cover scale-105" 
+                className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
               />
               
               {/* Overlay Efek Scanner / Bracket Kamera (Emerald) */}
@@ -337,7 +373,7 @@ export default function FormExcellence({ onBack }) {
                   <span className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span>
                   Data & Bukti Absensi Briefing <span className="text-slate-400 font-normal text-sm">(Opsional)</span>
                 </h2>
-                <p className="text-sm text-slate-500 mt-1 pl-8">Isi catatan dan unggah foto briefing 3 kali dalam seminggu jika unit Anda melaksanakannya.</p>
+                <p className="text-sm text-slate-500 mt-1 pl-8">Isi tanggal dan unggah dokumen bukti kehadiran briefing 3 kali dalam seminggu.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pl-0 sm:pl-8">
@@ -356,28 +392,55 @@ export default function FormExcellence({ onBack }) {
                         />
                       </div>
                       
-                      {/* UPLOAD FOTO BUKTI BRIEFING */}
+                      {/* UPLOAD FOTO/DOKUMEN BUKTI BRIEFING */}
                       <div className="pt-2">
-                        <label className="block text-xs font-bold text-slate-600 mb-2">Bukti Foto Briefing</label>
-                        <div className={`relative h-32 flex justify-center items-center rounded-xl border-2 border-dashed transition-all duration-300 overflow-hidden ${briefing.foto ? 'border-emerald-500 bg-black' : 'border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/50 bg-white'}`}>
-                          {briefing.foto ? (
-                             <>
-                               <img src={URL.createObjectURL(briefing.foto)} alt={`Bukti Briefing ${index + 1}`} className="absolute inset-0 w-full h-full object-cover opacity-80" />
-                               <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
-                                 <label className="cursor-pointer bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold shadow text-xs hover:bg-emerald-700 transition-colors">
-                                   Ganti Foto
-                                   <input type="file" accept="image/*" className="sr-only" onChange={(e) => handleBriefingFileChange(index, e)} />
-                                 </label>
-                               </div>
-                             </>
-                          ) : (
-                             <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-emerald-500 group">
-                               <svg className="w-8 h-8 mb-1 transition-transform group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                               <span className="text-[10px] font-bold uppercase tracking-wider">Upload Foto</span>
-                               <input type="file" accept="image/*" className="sr-only" onChange={(e) => handleBriefingFileChange(index, e)} />
-                             </label>
-                          )}
-                        </div>
+                        <label className="block text-xs font-bold text-slate-600 mb-2">Dokumen Bukti Kehadiran</label>
+                        {briefing.foto ? (
+                          <div className="relative w-full px-3 py-2 border-2 border-emerald-500 bg-emerald-50/50 rounded-xl flex items-center justify-between shadow-sm animate-fade-in">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              {briefing.foto.type.startsWith('image/') ? (
+                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-emerald-200 flex-shrink-0 bg-white shadow-sm">
+                                  <img src={URL.createObjectURL(briefing.foto)} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center border border-emerald-200 flex-shrink-0">
+                                  <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                </div>
+                              )}
+                              <div className="truncate">
+                                <span className="text-xs font-bold text-slate-800 truncate block">{briefing.foto.name}</span>
+                                <span className="text-[10px] font-semibold text-emerald-600">
+                                  {(briefing.foto.size / 1024 / 1024).toFixed(2)} MB
+                                </span>
+                              </div>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const newBriefings = [...briefings];
+                                newBriefings[index].foto = null;
+                                setBriefings(newBriefings);
+                              }} 
+                              className="text-rose-500 hover:bg-rose-100 p-1.5 rounded-lg transition-colors flex-shrink-0"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="relative w-full flex flex-col items-center justify-center px-4 py-6 border-2 border-dashed border-slate-300 rounded-xl hover:border-emerald-400 bg-white hover:bg-emerald-50/50 transition-all cursor-pointer group">
+                            <svg className="w-6 h-6 text-emerald-500 mb-2 transition-transform group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            <span className="text-emerald-600 font-bold text-xs mb-0.5">Upload Dokumen</span>
+                            <span className="text-slate-400 text-[10px] font-medium text-center leading-tight px-2">Format: JPG, PNG, PDF</span>
+                            <input 
+                              type="file" 
+                              className="sr-only" 
+                              onChange={(e) => handleBriefingFileChange(index, e)} 
+                              accept="image/*,.pdf,.doc,.docx"
+                            />
+                          </label>
+                        )}
                       </div>
 
                     </div>
