@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
 export default function FormAbsensi({ onBack }) {
   // State Absensi
-  const [activeType, setActiveType] = useState(null); // 'masuk' | 'pulang' | 'lembur-in' | 'lembur-out'
+  const [activeType, setActiveType] = useState(null); // 'Masuk' | 'Pulang' | 'Lembur In' | 'Lembur Out'
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -45,6 +45,7 @@ export default function FormAbsensi({ onBack }) {
     }
 
     try {
+      // Percobaan pertama: Buka dengan spesifik facingMode (Depan/Belakang)
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: mode }
       });
@@ -52,14 +53,26 @@ export default function FormAbsensi({ onBack }) {
       setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
-      alert("Kamera tidak dapat diakses. Pastikan izin kamera aktif.");
+      console.warn("Gagal membuka spesifik mode kamera, mencoba mode fallback...", err);
+      // Fallback: Jika error (biasanya karena limitasi hardware/browser hp minta kamera depan), 
+      // kita panggil kamera default apa saja tanpa aturan facingMode.
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+        setStream(fallbackStream);
+        setFacingMode(mode); // Tetap simpan state untuk kebutuhan canvas mirror
+        setIsCameraActive(true);
+      } catch (fallbackErr) {
+        alert(`Kamera Gagal Diakses!\n\nAlasan: ${fallbackErr.name} - ${fallbackErr.message}\n\nSolusi: Klik ikon Gembok (🔒) di URL bar atas, pilih 'Permissions / Izin', dan pastikan Kamera di-Set ke 'Allow / Izinkan'.`);
+      }
     }
   };
 
   // Fungsi Toggle Kamera Depan/Belakang
   const toggleCamera = () => {
     const newMode = facingMode === 'environment' ? 'user' : 'environment';
-    startCamera(null, newMode);
+    startCamera(activeType, newMode);
   };
 
   useEffect(() => {
@@ -94,7 +107,7 @@ export default function FormAbsensi({ onBack }) {
       // 1. Gambar frame video asli ke canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Kembalikan transformasi canvas ke normal sebelum menggambar watermark
+      // Kembalikan transformasi canvas ke normal sebelum menggambar watermark teks biar gak kebalik
       if (facingMode === 'user') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
@@ -114,9 +127,11 @@ export default function FormAbsensi({ onBack }) {
           logoImg.onerror = reject;
         });
 
+        // Draw logo (X, Y, Lebar, Tinggi) 
         ctx.drawImage(logoImg, 35, canvas.height - 125, 200, 40); 
       } catch (err) {
         console.error("Gagal load logo watermark", err);
+        // Fallback teks kalau gambar gagal load
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 20px Arial";
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
@@ -133,8 +148,9 @@ export default function FormAbsensi({ onBack }) {
 
       ctx.fillStyle = "#38bdf8"; 
       ctx.font = "bold 14px Arial";
-      ctx.fillText(`STATUS: ABSEN ${activeType.toUpperCase()}`, 35, canvas.height - 30);
+      ctx.fillText(`STATUS: ABSEN ${activeType?.toUpperCase()}`, 35, canvas.height - 30);
       
+      // Convert ke Data URL (JPEG)
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
       setCapturedPhoto(photoDataUrl);
       stopCamera();
@@ -155,7 +171,7 @@ export default function FormAbsensi({ onBack }) {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center py-10 px-4 animate-fade-in-up">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center border border-slate-100">
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg className="w-10 h-10 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -186,68 +202,78 @@ export default function FormAbsensi({ onBack }) {
         </button>
 
         {/* =========================================================
-            KAMERA PHOTOBOOTH OVERLAY
+            OVERLAY KAMERA ESTETIK (Model POPUP Anti-Scroll)
             ========================================================= */}
         {isCameraActive && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in">
-            <div className="absolute top-6 left-6 text-white font-bold bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-white/30 uppercase tracking-widest text-sm">
-              Absen {activeType}
-            </div>
-            
-            {/* Header Buttons */}
-            <div className="absolute top-6 right-6 flex items-center gap-3">
-              {/* TOMBOL GANTI KAMERA (Hanya muncul di Mobile/Device yang support multiple camera) */}
-              <button onClick={toggleCamera} className="text-white bg-white/20 hover:bg-white/40 p-3 rounded-full backdrop-blur-sm transition-all duration-300">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-
-              {/* Tombol Close */}
-              <button onClick={stopCamera} className="text-white bg-rose-500/80 hover:bg-rose-600 p-3 rounded-full backdrop-blur-sm transition-all duration-300 shadow-lg shadow-rose-500/30">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/20">
-              {/* Mirror effect untuk kamera depan */}
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
-              />
+          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-slate-800 w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl flex flex-col relative border border-slate-700">
               
-              {/* Overlay Watermark (UI Preview) */}
-              <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-white shadow-lg">
-                <div className="mb-2">
-                   <img src="https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png" alt="Logo RS" className="h-8 object-contain" />
-                </div>
-                <div className="text-xs text-slate-300 mb-1">{dateString}</div>
-                <div className="text-base font-bold text-white mb-2">{timeString}</div>
-                <div className="inline-block bg-emerald-500/30 text-emerald-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-emerald-500/50">
-                  ABSEN: {activeType}
+              {/* Header Action di dalam Popup */}
+              <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
+                <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[60%]">
+                  Absen {activeType}
+                </span>
+                
+                <div className="flex gap-2">
+                  {/* Tombol Rotate/Flip Camera */}
+                  <button onClick={toggleCamera} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-full transition-colors">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  {/* Tombol Close */}
+                  <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
                 </div>
               </div>
 
-              {/* Bracket Scanner Tengah */}
-              <div className="absolute inset-0 pointer-events-none p-6 opacity-40">
-                <div className="w-full h-full relative border-2 border-white/30 rounded-3xl">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 border-4 border-white/50 rounded-full"></div>
+              {/* Viewfinder Kamera */}
+              <div className="relative w-full aspect-[3/4] max-h-[60vh] bg-black flex items-center justify-center overflow-hidden mt-16">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  className={`w-full h-full object-cover scale-105 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
+                />
+                
+                {/* Overlay Efek Scanner Bracket */}
+                <div className="absolute inset-0 pointer-events-none p-6 opacity-60">
+                  <div className="w-full h-full relative">
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-sky-500 rounded-tl-xl"></div>
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-sky-500 rounded-tr-xl"></div>
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-sky-500 rounded-bl-xl"></div>
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-sky-500 rounded-br-xl"></div>
+                  </div>
+                </div>
+
+                {/* Overlay UI Preview Watermark */}
+                <div className="absolute bottom-3 left-3 right-3 bg-black/50 backdrop-blur-md p-3 rounded-xl border border-white/20 text-white pointer-events-none">
+                  <div className="mb-1">
+                     <img src="https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png" alt="Logo RS" className="h-5 object-contain" />
+                  </div>
+                  <div className="text-[10px] text-slate-300 mb-0.5">{dateString}</div>
+                  <div className="text-sm font-bold text-white mb-1.5">{timeString}</div>
+                  <div className="inline-block bg-sky-500/30 text-sky-300 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-sky-500/50">
+                    STATUS: ABSEN {activeType?.toUpperCase()}
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Tombol Jepret */}
-            <div className="mt-8 flex flex-col items-center">
-              <button onClick={capturePhoto} className="relative flex items-center justify-center w-20 h-20 rounded-full border-[4px] border-white/80 hover:border-emerald-400 transition-colors duration-300 group focus:outline-none">
-                <div className="w-16 h-16 bg-white rounded-full transition-all duration-200 transform group-hover:scale-90 group-active:scale-75 shadow-[0_0_20px_rgba(255,255,255,0.5)]"></div>
-              </button>
-              <p className="mt-4 text-white/80 font-bold tracking-widest uppercase text-[10px] animate-pulse">Ketuk Untuk Jepret</p>
+              {/* Tombol Jepret Area */}
+              <div className="bg-slate-800 p-5 flex flex-col items-center justify-center">
+                <button 
+                  onClick={capturePhoto} 
+                  className="relative flex items-center justify-center w-16 h-16 rounded-full border-[3px] border-slate-300 hover:border-sky-400 transition-colors duration-300 focus:outline-none"
+                >
+                  <div className="w-12 h-12 bg-white rounded-full transition-all duration-200 active:scale-75 shadow-[0_0_15px_rgba(255,255,255,0.5)]"></div>
+                </button>
+                <p className="mt-3 text-slate-400 font-bold tracking-widest uppercase text-[10px]">
+                  Ketuk Untuk Jepret
+                </p>
+              </div>
+              
             </div>
-            
             <canvas ref={canvasRef} className="hidden" />
           </div>
         )}
@@ -255,14 +281,14 @@ export default function FormAbsensi({ onBack }) {
         {/* =========================================================
             PREVIEW HASIL FOTO SEBELUM SUBMIT
             ========================================================= */}
-        {capturedPhoto && !isSuccess && (
+        {capturedPhoto && !isSuccess && !isCameraActive && (
           <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in p-6">
             <h2 className="text-white text-2xl font-bold mb-6">Preview Absensi</h2>
-            <div className="relative max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white/10 mb-8">
-              <img src={capturedPhoto} alt="Hasil Absen" className="w-full h-auto object-cover" />
+            <div className="relative max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white/10 mb-8 max-h-[60vh] flex items-center justify-center bg-black">
+              <img src={capturedPhoto} alt="Hasil Absen" className="w-full h-auto max-h-full object-contain" />
             </div>
             <div className="flex gap-4 w-full max-w-sm">
-              <button onClick={() => startCamera(activeType, facingMode)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors">
+              <button onClick={() => startCamera(activeType, facingMode)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors shadow-lg">
                 Foto Ulang
               </button>
               <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
