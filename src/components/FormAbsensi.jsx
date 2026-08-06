@@ -13,47 +13,58 @@ export default function FormAbsensi({ onBack }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const [currentTime, setCurrentTime] = useState(null); // Set null diawal buat nunggu waktu server
+  const [currentTime, setCurrentTime] = useState(null); // Default null untuk loading time
 
   // =====================================
-  // ANTI MANIPULASI TINGKAT DEWA (HTTP HEADER TIME)
+  // ANTI MANIPULASI TINGKAT DEWA (API WAKTU)
   // =====================================
   useEffect(() => {
     let timer;
     let trueTime;
 
-    const fetchServerTime = async () => {
+    const fetchTrueTime = async () => {
       try {
-        // Tembak header server Vercel ini sendiri buat ngambil waktu asli internet (Bebas CORS & Super Cepat)
-        const res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
-        const dateHeader = res.headers.get('date');
+        // Tembak API Waktu Dunia (Bypass CORS & Anti-Tuyul Jam HP)
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Asia/Jakarta');
+        if (!res.ok) throw new Error("API Waktu down");
         
-        if (dateHeader) {
-          trueTime = new Date(dateHeader);
-        } else {
-          trueTime = new Date(); // Fallback darurat
-        }
-        
+        const data = await res.json();
+        // Set patokan waktu asli dari satelit internet
+        trueTime = new Date(data.datetime);
         setCurrentTime(trueTime);
 
-        // Bikin detakan jam sendiri berdasarkan waktu server, bukan waktu hardware HP
+        // Biarkan jam berdetak mandiri di background
         timer = setInterval(() => {
           trueTime = new Date(trueTime.getTime() + 1000);
           setCurrentTime(new Date(trueTime));
         }, 1000);
-        
-      } catch (error) {
-        console.warn("Gagal fetch waktu server, fallback ke waktu HP", error);
-        trueTime = new Date();
-        setCurrentTime(trueTime);
-        timer = setInterval(() => {
-          trueTime = new Date(trueTime.getTime() + 1000);
-          setCurrentTime(new Date(trueTime));
-        }, 1000);
+
+      } catch (err) {
+        console.warn("Gagal memuat API Waktu, mencoba fallback...", err);
+        // Fallback API ke-2 jika server pertama limit
+        try {
+          const fallbackRes = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Asia/Jakarta');
+          const fallbackData = await fallbackRes.json();
+          trueTime = new Date(fallbackData.dateTime);
+          setCurrentTime(trueTime);
+
+          timer = setInterval(() => {
+            trueTime = new Date(trueTime.getTime() + 1000);
+            setCurrentTime(new Date(trueTime));
+          }, 1000);
+        } catch (err2) {
+          // Jika tidak ada koneksi internet sama sekali
+          trueTime = new Date();
+          setCurrentTime(trueTime);
+          timer = setInterval(() => {
+            trueTime = new Date(trueTime.getTime() + 1000);
+            setCurrentTime(new Date(trueTime));
+          }, 1000);
+        }
       }
     };
 
-    fetchServerTime();
+    fetchTrueTime();
 
     return () => {
       if (timer) clearInterval(timer);
@@ -67,7 +78,7 @@ export default function FormAbsensi({ onBack }) {
     
   const dateString = currentTime 
     ? currentTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    : '...';
+    : 'Menyinkronkan Server...';
 
   const absenCards = [
     { id: 'Masuk', title: 'Absen Masuk', desc: 'Mulai shift kerja reguler', color: 'emerald', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' },
@@ -88,6 +99,7 @@ export default function FormAbsensi({ onBack }) {
     }
 
     try {
+      // Auto bypass langsung minta kamera depan ('user')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' }
       });
@@ -122,9 +134,9 @@ export default function FormAbsensi({ onBack }) {
   };
 
   const capturePhoto = async () => {
-    // Kunci capture jika waktu belum berhasil di-load dari API
+    // Kunci jepretan kalau jam satelit belum berhasil di-load
     if (!currentTime) {
-      alert("Harap tunggu, sedang memverifikasi waktu server asli...");
+      alert("Tunggu sebentar bos, sedang verifikasi jam asli dari server anti-tuyul!");
       return;
     }
 
@@ -243,7 +255,7 @@ export default function FormAbsensi({ onBack }) {
               {/* Header Action di dalam Popup */}
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
                 <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[70%]">
-                  Absen {activeType} (Kamera Depan)
+                  Absen {activeType}
                 </span>
                 
                 <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors shadow-lg shadow-rose-500/30">
