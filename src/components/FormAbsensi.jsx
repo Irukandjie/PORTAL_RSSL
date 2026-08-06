@@ -7,9 +7,9 @@ export default function FormAbsensi({ onBack }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // State Kamera & Waktu
+  // State Kamera & Waktu (DI-SET DEFAULT KE 'user' UNTUK KAMERA DEPAN)
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode, setFacingMode] = useState('user'); // Default Kamera Depan
+  const [facingMode] = useState('user'); 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -22,17 +22,19 @@ export default function FormAbsensi({ onBack }) {
   }, []);
 
   // =====================================
-  // ANTI MANIPULASI ZONA WAKTU (LOCK KE WIB / UTC+7)
+  // KUNCI WAKTU KE UTC+7 (WIB) 
+  // MENCEGAH MANIPULASI ZONA WAKTU DI HP
   // =====================================
   const timeString = currentTime.toLocaleTimeString('id-ID', { 
-    timeZone: 'Asia/Jakarta', 
+    timeZone: 'Asia/Jakarta', // Kunci ke WIB (UTC+7)
     hour: '2-digit', 
     minute: '2-digit', 
-    second: '2-digit' 
+    second: '2-digit',
+    hour12: false
   }) + ' WIB';
   
   const dateString = currentTime.toLocaleDateString('id-ID', { 
-    timeZone: 'Asia/Jakarta', 
+    timeZone: 'Asia/Jakarta', // Kunci ke WIB (UTC+7)
     weekday: 'long', 
     day: 'numeric', 
     month: 'long', 
@@ -134,7 +136,7 @@ export default function FormAbsensi({ onBack }) {
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
       }
       
-      // 4. Tambahkan Teks Watermark Lainnya
+      // 4. Tambahkan Teks Watermark Lainnya yang sudah dikunci ke UTC+7
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "14px Arial";
       ctx.fillText(dateString, 35, canvas.height - 70);
@@ -208,7 +210,7 @@ export default function FormAbsensi({ onBack }) {
               {/* Header Action di dalam Popup */}
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
                 <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[70%]">
-                  Absen {activeType}
+                  Absen {activeType} (Kamera Depan)
                 </span>
                 
                 <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
