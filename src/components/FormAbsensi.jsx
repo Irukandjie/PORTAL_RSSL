@@ -7,9 +7,9 @@ export default function FormAbsensi({ onBack }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // State Kamera & Waktu (DI-SET DEFAULT KE 'user' UNTUK KAMERA DEPAN)
+  // State Kamera & Waktu
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode] = useState('user'); 
+  const [facingMode, setFacingMode] = useState('user'); // Default Kamera Depan
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -21,9 +21,23 @@ export default function FormAbsensi({ onBack }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Format Waktu & Tanggal
-  const timeString = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
-  const dateString = currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // =====================================
+  // ANTI MANIPULASI ZONA WAKTU (LOCK KE WIB / UTC+7)
+  // =====================================
+  const timeString = currentTime.toLocaleTimeString('id-ID', { 
+    timeZone: 'Asia/Jakarta', 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit' 
+  }) + ' WIB';
+  
+  const dateString = currentTime.toLocaleDateString('id-ID', { 
+    timeZone: 'Asia/Jakarta', 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
 
   const absenCards = [
     { id: 'Masuk', title: 'Absen Masuk', desc: 'Mulai shift kerja reguler', color: 'emerald', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' },
@@ -194,7 +208,7 @@ export default function FormAbsensi({ onBack }) {
               {/* Header Action di dalam Popup */}
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
                 <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[70%]">
-                  Absen {activeType} (Kamera Depan)
+                  Absen {activeType}
                 </span>
                 
                 <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
