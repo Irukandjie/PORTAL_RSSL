@@ -7,39 +7,67 @@ export default function FormAbsensi({ onBack }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // State Kamera & Waktu (DI-SET DEFAULT KE 'user' UNTUK KAMERA DEPAN)
+  // State Kamera & Waktu
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode] = useState('user'); 
+  const [facingMode] = useState('user'); // Default Kamera Depan
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(null); // Set null diawal buat nunggu waktu server
 
-  // Update jam real-time setiap detik
+  // =====================================
+  // ANTI MANIPULASI TINGKAT DEWA (HTTP HEADER TIME)
+  // =====================================
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    let timer;
+    let trueTime;
+
+    const fetchServerTime = async () => {
+      try {
+        // Tembak header server Vercel ini sendiri buat ngambil waktu asli internet (Bebas CORS & Super Cepat)
+        const res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
+        const dateHeader = res.headers.get('date');
+        
+        if (dateHeader) {
+          trueTime = new Date(dateHeader);
+        } else {
+          trueTime = new Date(); // Fallback darurat
+        }
+        
+        setCurrentTime(trueTime);
+
+        // Bikin detakan jam sendiri berdasarkan waktu server, bukan waktu hardware HP
+        timer = setInterval(() => {
+          trueTime = new Date(trueTime.getTime() + 1000);
+          setCurrentTime(new Date(trueTime));
+        }, 1000);
+        
+      } catch (error) {
+        console.warn("Gagal fetch waktu server, fallback ke waktu HP", error);
+        trueTime = new Date();
+        setCurrentTime(trueTime);
+        timer = setInterval(() => {
+          trueTime = new Date(trueTime.getTime() + 1000);
+          setCurrentTime(new Date(trueTime));
+        }, 1000);
+      }
+    };
+
+    fetchServerTime();
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
   }, []);
 
-  // =====================================
-  // KUNCI WAKTU KE UTC+7 (WIB) 
-  // MENCEGAH MANIPULASI ZONA WAKTU DI HP
-  // =====================================
-  const timeString = currentTime.toLocaleTimeString('id-ID', { 
-    timeZone: 'Asia/Jakarta', // Kunci ke WIB (UTC+7)
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit',
-    hour12: false
-  }) + ' WIB';
-  
-  const dateString = currentTime.toLocaleDateString('id-ID', { 
-    timeZone: 'Asia/Jakarta', // Kunci ke WIB (UTC+7)
-    weekday: 'long', 
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
-  });
+  // Format Waktu & Tanggal (Terkunci di UTC+7 / WIB)
+  const timeString = currentTime 
+    ? currentTime.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' WIB'
+    : 'Memuat Waktu...';
+    
+  const dateString = currentTime 
+    ? currentTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : '...';
 
   const absenCards = [
     { id: 'Masuk', title: 'Absen Masuk', desc: 'Mulai shift kerja reguler', color: 'emerald', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' },
@@ -60,7 +88,6 @@ export default function FormAbsensi({ onBack }) {
     }
 
     try {
-      // Auto bypass langsung minta kamera depan ('user')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' }
       });
@@ -95,6 +122,12 @@ export default function FormAbsensi({ onBack }) {
   };
 
   const capturePhoto = async () => {
+    // Kunci capture jika waktu belum berhasil di-load dari API
+    if (!currentTime) {
+      alert("Harap tunggu, sedang memverifikasi waktu server asli...");
+      return;
+    }
+
     if (videoRef.current && canvasRef.current && isCameraActive) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -136,7 +169,7 @@ export default function FormAbsensi({ onBack }) {
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
       }
       
-      // 4. Tambahkan Teks Watermark Lainnya yang sudah dikunci ke UTC+7
+      // 4. Tambahkan Teks Watermark Lainnya
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "14px Arial";
       ctx.fillText(dateString, 35, canvas.height - 70);
@@ -213,7 +246,7 @@ export default function FormAbsensi({ onBack }) {
                   Absen {activeType} (Kamera Depan)
                 </span>
                 
-                <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
+                <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors shadow-lg shadow-rose-500/30">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
