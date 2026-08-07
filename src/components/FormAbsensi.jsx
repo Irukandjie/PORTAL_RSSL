@@ -9,62 +9,48 @@ export default function FormAbsensi({ onBack }) {
 
   // State Kamera & Waktu
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode] = useState('user'); // Default Kamera Depan
+  const [facingMode, setFacingMode] = useState('user'); // Default Kamera Depan
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const [currentTime, setCurrentTime] = useState(null); // Default null untuk loading time
+  const [currentTime, setCurrentTime] = useState(null);
 
   // =====================================
-  // ANTI MANIPULASI TINGKAT DEWA (API WAKTU)
+  // ANTI MANIPULASI TINGKAT DEWA (SISTEM OFFSET)
   // =====================================
   useEffect(() => {
     let timer;
-    let trueTime;
 
-    const fetchTrueTime = async () => {
+    const syncTime = async () => {
       try {
-        // Tembak API Waktu Dunia (Bypass CORS & Anti-Tuyul Jam HP)
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Asia/Jakarta');
+        // Tembak API Waktu dengan cache-buster biar gak dapet waktu basi
+        const res = await fetch(`https://worldtimeapi.org/api/timezone/Asia/Jakarta?nocache=${Date.now()}`);
         if (!res.ok) throw new Error("API Waktu down");
         
         const data = await res.json();
-        // Set patokan waktu asli dari satelit internet
-        trueTime = new Date(data.datetime);
-        setCurrentTime(trueTime);
+        const serverTime = new Date(data.datetime).getTime();
+        const localTime = Date.now();
+        
+        // Hitung selisih waktu antara server dan HP (Offset)
+        const offset = serverTime - localTime;
 
-        // Biarkan jam berdetak mandiri di background
+        // Jam berdetak pakai hardware HP tapi ditambah offset server
+        setCurrentTime(new Date(Date.now() + offset));
         timer = setInterval(() => {
-          trueTime = new Date(trueTime.getTime() + 1000);
-          setCurrentTime(new Date(trueTime));
+          setCurrentTime(new Date(Date.now() + offset));
         }, 1000);
 
       } catch (err) {
-        console.warn("Gagal memuat API Waktu, mencoba fallback...", err);
-        // Fallback API ke-2 jika server pertama limit
-        try {
-          const fallbackRes = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Asia/Jakarta');
-          const fallbackData = await fallbackRes.json();
-          trueTime = new Date(fallbackData.dateTime);
-          setCurrentTime(trueTime);
-
-          timer = setInterval(() => {
-            trueTime = new Date(trueTime.getTime() + 1000);
-            setCurrentTime(new Date(trueTime));
-          }, 1000);
-        } catch (err2) {
-          // Jika tidak ada koneksi internet sama sekali
-          trueTime = new Date();
-          setCurrentTime(trueTime);
-          timer = setInterval(() => {
-            trueTime = new Date(trueTime.getTime() + 1000);
-            setCurrentTime(new Date(trueTime));
-          }, 1000);
-        }
+        console.warn("Gagal sinkron waktu server, pakai jam lokal", err);
+        // Fallback kalau gak ada sinyal internet sama sekali
+        setCurrentTime(new Date());
+        timer = setInterval(() => {
+          setCurrentTime(new Date());
+        }, 1000);
       }
     };
 
-    fetchTrueTime();
+    syncTime();
 
     return () => {
       if (timer) clearInterval(timer);
@@ -78,7 +64,7 @@ export default function FormAbsensi({ onBack }) {
     
   const dateString = currentTime 
     ? currentTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    : 'Menyinkronkan Server...';
+    : 'Menyinkronkan...';
 
   const absenCards = [
     { id: 'Masuk', title: 'Absen Masuk', desc: 'Mulai shift kerja reguler', color: 'emerald', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' },
@@ -90,7 +76,7 @@ export default function FormAbsensi({ onBack }) {
   // =====================================
   // LOGIC KAMERA (AUTO BYPASS KE DEPAN)
   // =====================================
-  const startCamera = async (type) => {
+  const startCamera = async (type, mode = facingMode) => {
     if (type) setActiveType(type);
     setCapturedPhoto(null);
     
@@ -99,14 +85,14 @@ export default function FormAbsensi({ onBack }) {
     }
 
     try {
-      // Auto bypass langsung minta kamera depan ('user')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' }
+        video: { facingMode: mode }
       });
       setStream(mediaStream);
+      setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
-      console.warn("Gagal membuka kamera depan spesifik, mencoba fallback default...", err);
+      console.warn("Gagal membuka kamera, mencoba fallback...", err);
       try {
         const fallbackStream = await navigator.mediaDevices.getUserMedia({
           video: true
@@ -114,9 +100,14 @@ export default function FormAbsensi({ onBack }) {
         setStream(fallbackStream);
         setIsCameraActive(true);
       } catch (fallbackErr) {
-        alert(`Kamera Gagal Diakses!\n\nAlasan: ${fallbackErr.name} - ${fallbackErr.message}\n\nSolusi: Klik ikon Gembok (🔒) di URL bar atas, pilih 'Permissions / Izin', dan pastikan Kamera di-Set ke 'Allow / Izinkan'.`);
+        alert(`Kamera Gagal Diakses!\n\nAlasan: ${fallbackErr.name} - ${fallbackErr.message}\n\nSolusi: Izinkan akses kamera di pengaturan browser Anda.`);
       }
     }
+  };
+
+  const toggleCamera = () => {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(activeType, newMode);
   };
 
   useEffect(() => {
@@ -134,7 +125,6 @@ export default function FormAbsensi({ onBack }) {
   };
 
   const capturePhoto = async () => {
-    // Kunci jepretan kalau jam satelit belum berhasil di-load
     if (!currentTime) {
       alert("Tunggu sebentar bos, sedang verifikasi jam asli dari server anti-tuyul!");
       return;
@@ -148,15 +138,19 @@ export default function FormAbsensi({ onBack }) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // Karena pakai kamera depan, flip canvas secara horizontal biar hasil foto nggak terbalik
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
+      // Jika kamera depan, flip canvas secara horizontal biar hasil foto nggak terbalik
+      if (facingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       
-      // 1. Gambar frame video asli ke canvas
+      // 1. Gambar frame video
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       // Kembalikan transformasi canvas ke normal sebelum menggambar watermark teks
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (facingMode === 'user') {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
       
       // 2. Gambar Background Watermark (Hitam transparan)
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
@@ -194,7 +188,7 @@ export default function FormAbsensi({ onBack }) {
       ctx.font = "bold 14px Arial";
       ctx.fillText(`STATUS: ABSEN ${activeType?.toUpperCase()}`, 35, canvas.height - 30);
       
-      // Convert ke Data URL (JPEG)
+      // Convert ke Data URL
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
       setCapturedPhoto(photoDataUrl);
       stopCamera();
@@ -246,30 +240,39 @@ export default function FormAbsensi({ onBack }) {
         </button>
 
         {/* =========================================================
-            OVERLAY KAMERA ESTETIK (Model POPUP Anti-Scroll - AUTO DEPAN)
+            OVERLAY KAMERA ESTETIK (Model POPUP Anti-Scroll)
             ========================================================= */}
         {isCameraActive && (
           <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-slate-800 w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl flex flex-col relative border border-slate-700">
               
-              {/* Header Action di dalam Popup */}
+              {/* Header Action Estetik di dalam Popup */}
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
-                <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[70%]">
+                <span className="text-white font-bold tracking-wide text-xs bg-sky-500/20 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 truncate max-w-[60%]">
                   Absen {activeType}
                 </span>
                 
-                <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors shadow-lg shadow-rose-500/30">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
+                <div className="flex gap-2">
+                  {/* Tombol Flip Camera */}
+                  <button onClick={toggleCamera} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-full transition-colors shadow-sm">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  {/* Tombol Close */}
+                  <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors shadow-sm">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
               </div>
 
-              {/* Viewfinder Kamera (Di-mirror otomatis biar pas selfie) */}
+              {/* Viewfinder Kamera */}
               <div className="relative w-full aspect-[3/4] max-h-[60vh] bg-black flex items-center justify-center overflow-hidden mt-16">
                 <video 
                   ref={videoRef} 
                   autoPlay 
                   playsInline 
-                  className="w-full h-full object-cover scale-x-[-1]" 
+                  className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
                 />
                 
                 {/* Overlay Efek Scanner Bracket */}
@@ -296,7 +299,7 @@ export default function FormAbsensi({ onBack }) {
               </div>
 
               {/* Tombol Jepret Area */}
-              <div className="bg-slate-800 p-5 flex flex-col items-center justify-center">
+              <div className="bg-slate-800 p-5 flex flex-col items-center justify-center border-t border-slate-700">
                 <button 
                   onClick={capturePhoto} 
                   className="relative flex items-center justify-center w-16 h-16 rounded-full border-[3px] border-slate-300 hover:border-sky-400 transition-colors duration-300 focus:outline-none"
