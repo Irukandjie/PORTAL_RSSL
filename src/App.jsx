@@ -36,8 +36,8 @@ export default function App() {
     setIsLoading(true); 
     setTimeout(() => {
       setIsLoggedIn(true);
-      // Arahkan pengguna langsung ke Admin Dashboard setelah berhasil login
-      setActivePage('admin-dashboard');
+      // PERBAIKAN: Arahkan ke 'home' (Portal Pegawai) biar Navbar langsung muncul
+      setActivePage('home');
       setIsLoading(false);
     }, 2500); 
   };
