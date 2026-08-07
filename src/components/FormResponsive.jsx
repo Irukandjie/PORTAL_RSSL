@@ -11,7 +11,7 @@ export default function FormResponsive({ onBack }) {
 
   // State Kamera & Waktu (Untuk Kategori IT)
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [facingMode, setFacingMode] = useState('environment'); // Default kamera belakang buat ngefoto error PC
+  const [facingMode, setFacingMode] = useState('environment'); // Default kamera belakang
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -55,7 +55,7 @@ export default function FormResponsive({ onBack }) {
     ? currentTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : 'Menyinkronkan...';
 
-  // Daftar Opsi Kategori[cite: 12]
+  // Daftar Opsi Kategori
   const kategoriOptions = [
     { 
       id: 'tulang_ikan', 
@@ -88,19 +88,20 @@ export default function FormResponsive({ onBack }) {
       setFacingMode(mode);
       setIsCameraActive(true);
     } catch (err) {
-      console.warn("Kamera gagal:", err);
+      console.warn("Kamera gagal dengan mode spesifik, mencoba fallback:", err);
       try {
         const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
         setStream(fallbackStream);
         setIsCameraActive(true);
       } catch (fallbackErr) {
-        alert("Gagal membuka kamera. Pastikan izin kamera aktif.");
+        alert("Gagal membuka kamera. Pastikan browser Anda memiliki izin untuk menggunakan kamera.");
       }
     }
   };
 
   const toggleCamera = () => {
-    startCamera(facingMode === 'environment' ? 'user' : 'environment');
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(newMode);
   };
 
   useEffect(() => {
@@ -127,6 +128,7 @@ export default function FormResponsive({ onBack }) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
+      // Mirror effect untuk kamera depan (selfie)
       if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -134,7 +136,10 @@ export default function FormResponsive({ onBack }) {
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      if (facingMode === 'user') ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // Kembalikan transformasi agar tulisan watermark tidak terbalik
+      if (facingMode === 'user') {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
       
       // Watermark Hitam Transparan
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
@@ -156,7 +161,7 @@ export default function FormResponsive({ onBack }) {
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
       }
       
-      // Teks Waktu
+      // Teks Waktu & Tanggal
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "14px Arial";
       ctx.fillText(dateString, 35, canvas.height - 70);
@@ -268,15 +273,17 @@ export default function FormResponsive({ onBack }) {
             <div className="bg-slate-800 w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl flex flex-col relative border border-slate-700">
               
               <div className="px-5 py-4 flex justify-between items-center bg-slate-800 absolute top-0 w-full z-20 shadow-sm border-b border-slate-700">
-                <span className="text-white font-bold tracking-wide text-xs bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-500/30 truncate">
+                <span className="text-white font-bold tracking-wide text-[10px] bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-500/30 truncate">
                   Kamera Laporan IT
                 </span>
                 
                 <div className="flex gap-2">
-                  <button onClick={toggleCamera} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-full transition-colors">
+                  {/* Tombol Flip Camera */}
+                  <button onClick={toggleCamera} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-full transition-colors shadow-sm" title="Ubah Kamera">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   </button>
-                  <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
+                  {/* Tombol Close */}
+                  <button onClick={stopCamera} className="bg-rose-500/80 hover:bg-rose-600 text-white p-2 rounded-full transition-colors shadow-sm" title="Tutup Kamera">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -311,6 +318,26 @@ export default function FormResponsive({ onBack }) {
               
             </div>
             <canvas ref={canvasRef} className="hidden" />
+          </div>
+        )}
+
+        {/* =========================================================
+            PREVIEW HASIL FOTO (Kamera IT)
+            ========================================================= */}
+        {file && typeof file === 'string' && !isSuccess && !isCameraActive && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in p-6">
+            <h2 className="text-white text-2xl font-bold mb-6">Preview Laporan IT</h2>
+            <div className="relative max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white/10 mb-8 max-h-[60vh] flex items-center justify-center bg-black">
+              <img src={file} alt="Hasil Jepretan" className="w-full h-auto max-h-full object-contain" />
+            </div>
+            <div className="flex gap-4 w-full max-w-sm">
+              <button onClick={() => startCamera(facingMode)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors shadow-lg">
+                Foto Ulang
+              </button>
+              <button onClick={() => setFile(file)} className="flex-1 py-4 bg-indigo-500 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-colors shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
+                Simpan & Lanjut
+              </button>
+            </div>
           </div>
         )}
 
@@ -374,7 +401,6 @@ export default function FormResponsive({ onBack }) {
                 {file ? (
                   <div className="relative w-full p-4 border-2 border-indigo-500 bg-indigo-50/50 rounded-2xl flex items-center justify-between shadow-sm animate-fade-in">
                     <div className="flex items-center gap-4 overflow-hidden">
-                      {/* Cek apakah file itu String Base64 (Dari Kamera) atau File Object biasa */}
                       {typeof file === 'string' ? (
                         <div className="w-16 h-16 rounded-xl overflow-hidden border border-indigo-200 flex-shrink-0 bg-black shadow-sm">
                           <img src={file} alt="Preview Jepretan" className="w-full h-full object-cover opacity-90" />
@@ -403,7 +429,7 @@ export default function FormResponsive({ onBack }) {
                     </button>
                   </div>
                 ) : kategori === 'perbaikan_it' ? (
-                  // TAMPILAN KHUSUS IT (BISA JEPRET ATAU UPLOAD VIDEO)
+                  // TAMPILAN KHUSUS IT (BISA JEPRET ATAU UPLOAD VIDEO TANPA FORCE REAR CAMERA)
                   <div className="flex flex-col sm:flex-row gap-4">
                     <button 
                       type="button" 
@@ -423,7 +449,7 @@ export default function FormResponsive({ onBack }) {
                       </div>
                       <span className="text-slate-600 font-bold text-sm">Upload Video / Dokumen</span>
                       <span className="text-slate-400 text-[10px] mt-1">(Khusus rekam layar/jaringan)</span>
-                      <input type="file" className="sr-only" onChange={handleFileChange} accept="video/*,image/*,.pdf,.doc,.docx" capture="environment" />
+                      <input type="file" className="sr-only" onChange={handleFileChange} accept="video/*,image/*,.pdf,.doc,.docx" />
                     </label>
                   </div>
                 ) : (
