@@ -16,21 +16,25 @@ export default function FormAbsensi({ onBack }) {
   const [currentTime, setCurrentTime] = useState(null);
 
   // =====================================
-  // ANTI MANIPULASI TINGKAT DEWA V2 (PURE SERVER + MONOTONIC CLOCK)
+  // ANTI MANIPULASI TINGKAT DEWA V3 (SERVER LOKAL + MONOTONIC CLOCK)
   // =====================================
   useEffect(() => {
     let timer;
 
     const syncTime = async () => {
       try {
-        // Tembak API Waktu dengan cache-buster biar gak dapet waktu basi
-        const res = await fetch(`https://worldtimeapi.org/api/timezone/Asia/Jakarta?nocache=${Date.now()}`);
-        if (!res.ok) throw new Error("API Waktu down");
+        // Tembak API Waktu ke Server Lokal / Intranet
+        // UBAH "/api/time" SESUAI DENGAN ALAMAT BACKEND KAMU
+        // Contoh: "http://192.168.1.100/api/time" atau "/absen/get_time.php"
+        const res = await fetch(`/api/time?nocache=${Date.now()}`);
+        if (!res.ok) throw new Error("API Waktu Lokal down");
         
         const data = await res.json();
-        const serverTime = new Date(data.datetime).getTime();
         
-        // Catat 'stopwatch' browser saat data diterima
+        // Asumsi API lokal merespons JSON: { "timestamp": 169xxxxxxxxx } (dalam format milidetik)
+        const serverTime = data.timestamp; 
+        
+        // Catat 'stopwatch' browser saat data diterima dari server lokal
         const startPerf = performance.now(); 
 
         // Initial set
@@ -44,10 +48,10 @@ export default function FormAbsensi({ onBack }) {
         }, 1000);
 
       } catch (err) {
-        console.error("Gagal sinkron waktu server:", err);
+        console.error("Gagal sinkron waktu server lokal:", err);
         // HAPUS FALLBACK KE JAM LOKAL!
         // Kalau gagal, biarkan currentTime null dan kasih peringatan ke user.
-        alert("Gagal memuat waktu server yang akurat. Pastikan koneksi internet Anda lancar dan muat ulang halaman.");
+        alert("Gagal memuat waktu dari server pusat. Pastikan HP terhubung ke jaringan WiFi RS/Kantor dan muat ulang halaman.");
       }
     };
 
@@ -127,7 +131,7 @@ export default function FormAbsensi({ onBack }) {
 
   const capturePhoto = async () => {
     if (!currentTime) {
-      alert("Tunggu sebentar bos, sedang verifikasi jam asli dari server anti-tuyul!");
+      alert("Tunggu sebentar bos, sedang memverifikasi jam dari server pusat!");
       return;
     }
 
@@ -198,6 +202,7 @@ export default function FormAbsensi({ onBack }) {
 
   const handleSubmit = () => {
     setIsSubmitting(true);
+    // TODO: Kirim data absen (photoDataUrl, activeType, currentTime) ke API Backend LOKAL
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSuccess(true);
