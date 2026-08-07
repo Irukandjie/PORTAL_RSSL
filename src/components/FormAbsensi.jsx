@@ -16,7 +16,7 @@ export default function FormAbsensi({ onBack }) {
   const [currentTime, setCurrentTime] = useState(null);
 
   // =====================================
-  // ANTI MANIPULASI TINGKAT DEWA (SISTEM OFFSET)
+  // ANTI MANIPULASI TINGKAT DEWA V2 (PURE SERVER + MONOTONIC CLOCK)
   // =====================================
   useEffect(() => {
     let timer;
@@ -29,24 +29,25 @@ export default function FormAbsensi({ onBack }) {
         
         const data = await res.json();
         const serverTime = new Date(data.datetime).getTime();
-        const localTime = Date.now();
         
-        // Hitung selisih waktu antara server dan HP (Offset)
-        const offset = serverTime - localTime;
+        // Catat 'stopwatch' browser saat data diterima
+        const startPerf = performance.now(); 
 
-        // Jam berdetak pakai hardware HP tapi ditambah offset server
-        setCurrentTime(new Date(Date.now() + offset));
+        // Initial set
+        setCurrentTime(new Date(serverTime));
+
+        // Jam berdetak pakai selisih stopwatch browser, BUKAN jam sistem HP
         timer = setInterval(() => {
-          setCurrentTime(new Date(Date.now() + offset));
+          const currentPerf = performance.now();
+          const elapsed = currentPerf - startPerf; // Berapa milidetik sejak API dipanggil
+          setCurrentTime(new Date(serverTime + elapsed));
         }, 1000);
 
       } catch (err) {
-        console.warn("Gagal sinkron waktu server, pakai jam lokal", err);
-        // Fallback kalau gak ada sinyal internet sama sekali
-        setCurrentTime(new Date());
-        timer = setInterval(() => {
-          setCurrentTime(new Date());
-        }, 1000);
+        console.error("Gagal sinkron waktu server:", err);
+        // HAPUS FALLBACK KE JAM LOKAL!
+        // Kalau gagal, biarkan currentTime null dan kasih peringatan ke user.
+        alert("Gagal memuat waktu server yang akurat. Pastikan koneksi internet Anda lancar dan muat ulang halaman.");
       }
     };
 
