@@ -90,7 +90,7 @@ export default function Navbar({ activePage, onNavigate, onLogout, isCameraOpen 
                   {item.label}
                 </button>
               );
-            });}
+            })}
 
             {/* Garis Pembatas Vertikal */}
             <div className="h-8 w-px bg-slate-200 mx-4"></div>
