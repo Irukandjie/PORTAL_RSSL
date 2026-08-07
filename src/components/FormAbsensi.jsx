@@ -32,19 +32,27 @@ export default function FormAbsensi({ onBack }) {
   ];
 
   // =====================================
-  // LOGIC KAMERA & WATERMARK CANVAS
+  // LOGIC KAMERA (AUTO DEPAN) & WATERMARK
   // =====================================
   const startCamera = async (type) => {
     setActiveType(type);
     setCapturedPhoto(null);
     try {
+      // Bypass langsung ke kamera depan ('user')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: 'user' }
       });
       setStream(mediaStream);
       setIsCameraActive(true);
     } catch (err) {
-      alert("Kamera tidak dapat diakses. Pastikan izin kamera aktif.");
+      console.warn("Kamera depan spesifik gagal, mencoba fallback...");
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setStream(fallbackStream);
+        setIsCameraActive(true);
+      } catch (fallbackErr) {
+        alert("Kamera tidak dapat diakses. Pastikan izin kamera aktif.");
+      }
     }
   };
 
@@ -71,18 +79,39 @@ export default function FormAbsensi({ onBack }) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // 1. Gambar frame video asli ke canvas
+      // 1. Terapkan Filter Estetik ke Canvas (Sama seperti di UI)
+      // Soft blur tipis (0.8px) + naikin brightness dan contrast
+      ctx.filter = 'blur(0.8px) brightness(1.1) contrast(1.05) saturate(1.1)';
+      
+      // Mirror canvas secara horizontal (karena ini kamera depan)
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      
+      // 2. Gambar frame video asli ke canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // 2. Gambar Background Watermark (Hitam transparan)
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(20, canvas.height - 140, 320, 120); // Disesuaikan tingginya buat logo
+      // Kembalikan transformasi & hapus filter sebelum menggambar watermark
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = 'none';
+
+      // 3. Tambahkan Efek Vignette (Bayangan Estetik di Pinggir Frame)
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.3, // Inner circle
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.8  // Outer circle
+      );
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // 3. Load dan Gambar Logo RS
-      // Pake Promise biar canvas nunggu gambarnya keload dulu sebelum di-draw
+      // 4. Gambar Background Watermark Teks (Hitam transparan)
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(20, canvas.height - 140, 320, 120); 
+      
+      // 5. Load dan Gambar Logo RS
       try {
         const logoImg = new Image();
-        logoImg.crossOrigin = "Anonymous"; // Biar ga kena error CORS pas save toDataURL
+        logoImg.crossOrigin = "Anonymous"; 
         logoImg.src = 'https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png';
         
         await new Promise((resolve, reject) => {
@@ -90,29 +119,24 @@ export default function FormAbsensi({ onBack }) {
           logoImg.onerror = reject;
         });
 
-        // Draw logo (X, Y, Lebar, Tinggi) -> Disesuaikan posisinya
         ctx.drawImage(logoImg, 35, canvas.height - 125, 200, 40); 
       } catch (err) {
         console.error("Gagal load logo watermark", err);
-        // Fallback teks kalau gambar gagal load
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 20px Arial";
         ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
       }
       
-      // 4. Tambahkan Teks Watermark Lainnya
-      // Tanggal
+      // 6. Tambahkan Teks Watermark Lainnya
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "14px Arial";
       ctx.fillText(dateString, 35, canvas.height - 70);
       
-      // Jam
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 16px Arial";
       ctx.fillText(timeString, 35, canvas.height - 50);
 
-      // Jenis Absen
-      ctx.fillStyle = "#38bdf8"; // emerald/cyan
+      ctx.fillStyle = "#38bdf8"; 
       ctx.font = "bold 14px Arial";
       ctx.fillText(`STATUS: ABSEN ${activeType.toUpperCase()}`, 35, canvas.height - 30);
       
@@ -180,7 +204,18 @@ export default function FormAbsensi({ onBack }) {
             </button>
 
             <div className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/20">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-105" />
+              
+              {/* VIDEO PREVIEW DENGAN FILTER ESTETIK & VIGNETTE OVERLAY */}
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className="w-full h-full object-cover scale-x-[-1]" 
+                style={{ filter: 'blur(0.8px) brightness(1.1) contrast(1.05) saturate(1.1)' }}
+              />
+              
+              {/* Efek Vignette di UI (Gelap di pojokan frame) */}
+              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]"></div>
               
               {/* Overlay Watermark (UI Preview) */}
               <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-white shadow-lg">
