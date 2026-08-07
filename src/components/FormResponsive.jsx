@@ -2,11 +2,34 @@ import React, { useState, useEffect } from 'react';
 
 export default function FormResponsive({ onBack }) {
   // State form
-  const [file, setFile] = useState(null); // Menyimpan objek file (bisa foto/dokumen)
-  const [narasi, setNarasi] = useState(''); // Text laporan
+  const [kategori, setKategori] = useState(''); // State baru untuk Opsi Laporan
+  const [file, setFile] = useState(null); 
+  const [narasi, setNarasi] = useState(''); 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Daftar Opsi Kategori
+  const kategoriOptions = [
+    { 
+      id: 'tulang_ikan', 
+      label: 'Internal (Tulang Ikan)', 
+      desc: 'Analisis akar masalah (RCA)',
+      icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' 
+    },
+    { 
+      id: 'perbaikan_sarana', 
+      label: 'Perbaikan Sarana', 
+      desc: 'Fasilitas & alat medis RS',
+      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' 
+    },
+    { 
+      id: 'perbaikan_it', 
+      label: 'IT (ERM & SIMRS)', 
+      desc: 'Jaringan & error sistem',
+      icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' 
+    }
+  ];
 
   // =====================================
   // LOGIC UPLOAD FILE
@@ -14,7 +37,6 @@ export default function FormResponsive({ onBack }) {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      // Batasan ukuran 10MB
       if (selectedFile.size > 10 * 1024 * 1024) {
         alert('Ukuran file terlalu besar! Maksimal 10MB.');
         e.target.value = null;
@@ -24,7 +46,6 @@ export default function FormResponsive({ onBack }) {
     }
   };
 
-  // Bersihkan object URL untuk mencegah memory leak
   useEffect(() => {
     return () => {
       if (file && file.type.startsWith('image/')) {
@@ -39,6 +60,11 @@ export default function FormResponsive({ onBack }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    // Validasi baru untuk kategori
+    if (!kategori) {
+      alert('Mohon pilih Opsi Kategori Laporan terlebih dahulu!');
+      return;
+    }
     if (!file) {
       alert('Mohon unggah bukti foto atau dokumen permasalahan sebelum mengirim form!');
       return;
@@ -49,7 +75,6 @@ export default function FormResponsive({ onBack }) {
     }
     
     setIsSubmitting(true);
-    // Simulasi loading ngirim data ke server 2 detik
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSuccess(true);
@@ -70,7 +95,7 @@ export default function FormResponsive({ onBack }) {
           </div>
           <h2 className="text-3xl font-bold text-slate-800 mb-4">Laporan Diterima!</h2>
           <p className="text-slate-500 mb-8">
-            Terima kasih! Laporan kondisi/insiden Anda beserta file buktinya telah masuk ke sistem dan akan segera ditindaklanjuti oleh manajemen RS Sekar Laras.
+            Terima kasih! Laporan Anda beserta file buktinya telah masuk ke sistem dan akan segera ditindaklanjuti oleh manajemen RS Sekar Laras.
           </p>
           <button onClick={onBack} className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-xl shadow-md hover:bg-indigo-700 transition-colors">
             Kembali ke Katalog Formulir
@@ -118,6 +143,41 @@ export default function FormResponsive({ onBack }) {
               </svg>
               <div>
                 Pegawai diwajibkan untuk aktif melaporkan kondisi pasien, insiden keselamatan, atau kerusakan sarana manajemen secara akurat dan tepat waktu.
+              </div>
+            </div>
+
+            {/* OPSI KATEGORI LAPORAN (BARU) */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-3">Kategori Laporan <span className="text-rose-500">*</span></label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {kategoriOptions.map((opt) => {
+                  const isActive = kategori === opt.id;
+                  return (
+                    <div 
+                      key={opt.id}
+                      onClick={() => setKategori(opt.id)}
+                      className={`cursor-pointer border-2 rounded-2xl p-4 flex flex-col items-center text-center gap-3 transition-all duration-300 ${
+                        isActive 
+                          ? 'border-indigo-500 bg-indigo-50/50 shadow-md transform -translate-y-1' 
+                          : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`p-3 rounded-full transition-colors ${isActive ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.icon} />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className={`text-sm font-bold mb-1 ${isActive ? 'text-indigo-800' : 'text-slate-700'}`}>
+                          {opt.label}
+                        </div>
+                        <div className={`text-xs ${isActive ? 'text-indigo-600/80' : 'text-slate-400'}`}>
+                          {opt.desc}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
