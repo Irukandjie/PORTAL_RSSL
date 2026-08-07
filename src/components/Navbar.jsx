@@ -1,7 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export default function Navbar({ activePage, onNavigate, onLogout }) {
+// Tambahkan prop "isCameraOpen" (default false)
+export default function Navbar({ activePage, onNavigate, onLogout, isCameraOpen = false }) {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // State untuk melacak visibilitas dan posisi scroll
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  // =====================================
+  // LOGIC AUTO-HIDE SAAT SCROLL
+  // =====================================
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // Sembunyikan navbar jika scroll ke bawah dan sudah lewat dari 50px
+      if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        setIsVisible(false);
+      } else {
+        // Munculkan lagi jika scroll ke atas
+        setIsVisible(true);
+      }
+      
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Cleanup event listener
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   const navItems = [
     { id: 'home', label: 'Beranda' },
@@ -10,8 +39,18 @@ export default function Navbar({ activePage, onNavigate, onLogout }) {
     { id: 'profile', label: 'Profil Saya' }
   ];
 
+  // =====================================
+  // KONDISI NAVBAR MENGHILANG
+  // =====================================
+  // Navbar sembunyi jika isVisible false (karena scroll) ATAU isCameraOpen true (kamera aktif)
+  const shouldHideNavbar = !isVisible || isCameraOpen;
+
   return (
-    <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <nav 
+      className={`bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm transition-transform duration-300 ease-in-out ${
+        shouldHideNavbar ? '-translate-y-full' : 'translate-y-0'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20">
           
@@ -51,7 +90,7 @@ export default function Navbar({ activePage, onNavigate, onLogout }) {
                   {item.label}
                 </button>
               );
-            })}
+            });}
 
             {/* Garis Pembatas Vertikal */}
             <div className="h-8 w-px bg-slate-200 mx-4"></div>
