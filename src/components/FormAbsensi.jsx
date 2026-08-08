@@ -1,28 +1,31 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // Wajib import ini
+import CameraPopup from './CameraPopup'; 
 
 export default function FormAbsensi({ onBack }) {
   // State Absensi
-  const [activeType, setActiveType] = useState(null); // 'masuk' | 'pulang' | 'lembur-in' | 'lembur-out'
+  const [activeType, setActiveType] = useState(null); 
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [mounted, setMounted] = useState(false); // State untuk React Portal
 
-  // State Kamera & Waktu
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [stream, setStream] = useState(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // State untuk kontrol Popup Kamera
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
-  // Update jam real-time setiap detik
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    setMounted(true);
   }, []);
 
-  // Format Waktu & Tanggal
-  const timeString = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
-  const dateString = currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // Kunci scroll body saat Preview atau Loading aktif
+  useEffect(() => {
+    if (capturedPhoto || isSubmitting) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => { document.body.style.overflow = 'auto'; }
+  }, [capturedPhoto, isSubmitting]);
 
   const absenCards = [
     { id: 'Masuk', title: 'Absen Masuk', desc: 'Mulai shift kerja reguler', color: 'emerald', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' },
@@ -31,123 +34,21 @@ export default function FormAbsensi({ onBack }) {
     { id: 'Lembur Out', title: 'Lembur OUT', desc: 'Akhiri jam kerja tambahan', color: 'purple', icon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z' }
   ];
 
-  // =====================================
-  // LOGIC KAMERA (AUTO DEPAN) & WATERMARK
-  // =====================================
-  const startCamera = async (type) => {
+  // Logic saat card absensi diklik
+  const handleCardClick = (type) => {
     setActiveType(type);
     setCapturedPhoto(null);
-    try {
-      // Bypass langsung ke kamera depan ('user')
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' }
-      });
-      setStream(mediaStream);
-      setIsCameraActive(true);
-    } catch (err) {
-      console.warn("Kamera depan spesifik gagal, mencoba fallback...");
-      try {
-        const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setStream(fallbackStream);
-        setIsCameraActive(true);
-      } catch (fallbackErr) {
-        alert("Kamera tidak dapat diakses. Pastikan izin kamera aktif.");
-      }
-    }
+    setIsCameraOpen(true);
   };
 
-  useEffect(() => {
-    if (isCameraActive && videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [isCameraActive, stream]);
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    setIsCameraActive(false);
+  // Logic HANYA MENYIMPAN FOTO ke Preview 
+  const handleCapture = (photoDataUrl) => {
+    setCapturedPhoto(photoDataUrl); 
+    setIsCameraOpen(false); 
   };
 
-  const capturePhoto = async () => {
-    if (videoRef.current && canvasRef.current && isCameraActive) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // 1. Terapkan Filter Estetik ke Canvas (Sama seperti di UI)
-      // Soft blur tipis (0.8px) + naikin brightness dan contrast
-      ctx.filter = 'blur(0.8px) brightness(1.1) contrast(1.05) saturate(1.1)';
-      
-      // Mirror canvas secara horizontal (karena ini kamera depan)
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      
-      // 2. Gambar frame video asli ke canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Kembalikan transformasi & hapus filter sebelum menggambar watermark
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.filter = 'none';
-
-      // 3. Tambahkan Efek Vignette (Bayangan Estetik di Pinggir Frame)
-      const gradient = ctx.createRadialGradient(
-        canvas.width / 2, canvas.height / 2, canvas.width * 0.3, // Inner circle
-        canvas.width / 2, canvas.height / 2, canvas.width * 0.8  // Outer circle
-      );
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // 4. Gambar Background Watermark Teks (Hitam transparan)
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(20, canvas.height - 140, 320, 120); 
-      
-      // 5. Load dan Gambar Logo RS
-      try {
-        const logoImg = new Image();
-        logoImg.crossOrigin = "Anonymous"; 
-        logoImg.src = 'https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png';
-        
-        await new Promise((resolve, reject) => {
-          logoImg.onload = resolve;
-          logoImg.onerror = reject;
-        });
-
-        ctx.drawImage(logoImg, 35, canvas.height - 125, 200, 40); 
-      } catch (err) {
-        console.error("Gagal load logo watermark", err);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 20px Arial";
-        ctx.fillText("🏥 RS SEKAR LARAS", 35, canvas.height - 105);
-      }
-      
-      // 6. Tambahkan Teks Watermark Lainnya
-      ctx.fillStyle = "#cbd5e1";
-      ctx.font = "14px Arial";
-      ctx.fillText(dateString, 35, canvas.height - 70);
-      
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 16px Arial";
-      ctx.fillText(timeString, 35, canvas.height - 50);
-
-      ctx.fillStyle = "#38bdf8"; 
-      ctx.font = "bold 14px Arial";
-      ctx.fillText(`STATUS: ABSEN ${activeType.toUpperCase()}`, 35, canvas.height - 30);
-      
-      // Convert ke Data URL (JPEG)
-      const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      setCapturedPhoto(photoDataUrl);
-      stopCamera();
-    }
-  };
-
-  const handleSubmit = () => {
+  // Logic KETIKA KLIK "KIRIM ABSEN" DARI PREVIEW
+  const handleConfirmSubmit = () => {
     setIsSubmitting(true);
     setTimeout(() => {
       setIsSubmitting(false);
@@ -161,16 +62,25 @@ export default function FormAbsensi({ onBack }) {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center py-10 px-4 animate-fade-in-up">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center">
-          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="max-w-sm w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl text-center border border-slate-100">
+          
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-4">Absen Berhasil!</h2>
-          <p className="text-slate-500 mb-8">
-            Data {activeType} Anda beserta foto timestamp telah terekam di server HRD. Selamat melanjutkan aktivitas!
+          
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Absen Berhasil!</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Data {activeType} beserta foto validasi timestamp telah terekam di sistem.
           </p>
+
+          {capturedPhoto && (
+            <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden shadow-lg border-4 border-slate-100 mb-6 bg-black">
+              <img src={capturedPhoto} alt="Bukti Absen" className="w-full h-full object-cover" />
+            </div>
+          )}
+
           <button onClick={onBack} className="w-full py-3.5 bg-slate-800 text-white font-bold rounded-xl shadow-md hover:bg-slate-900 transition-colors">
             Kembali ke Dashboard
           </button>
@@ -180,134 +90,108 @@ export default function FormAbsensi({ onBack }) {
   }
 
   // =====================================
+  // PORTAL OVERLAY: PREVIEW & LOADING
+  // =====================================
+  const previewOverlay = mounted && capturedPhoto && !isSubmitting ? createPortal(
+    <div className="fixed top-0 left-0 right-0 bottom-0 z-[99999] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center h-[100dvh] w-screen overflow-hidden touch-none p-6 animate-fade-in">
+      <h2 className="text-white text-2xl font-bold mb-6 drop-shadow-md">Preview Absensi</h2>
+      
+      <div className="relative w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl ring-4 ring-white/10 mb-8 flex items-center justify-center bg-black aspect-[3/4]">
+        <img src={capturedPhoto} alt="Hasil Absen" className="absolute inset-0 w-full h-full object-cover" />
+      </div>
+      
+      <div className="flex gap-4 w-full max-w-sm">
+        <button 
+          onClick={() => { setCapturedPhoto(null); setIsCameraOpen(true); }} 
+          className="flex-1 py-4 bg-white/10 backdrop-blur-md text-white font-bold rounded-2xl hover:bg-white/20 border border-white/20 transition-colors shadow-lg active:scale-95"
+        >
+          Foto Ulang
+        </button>
+        <button 
+          onClick={handleConfirmSubmit} 
+          className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95"
+        >
+          Kirim Absen
+        </button>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
+  const loadingOverlay = mounted && isSubmitting ? createPortal(
+    <div className="fixed top-0 left-0 right-0 bottom-0 z-[99999] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center h-[100dvh] w-screen overflow-hidden touch-none p-6 animate-fade-in">
+      <svg className="animate-spin h-14 w-14 text-emerald-500 mb-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <h2 className="text-white text-2xl font-bold tracking-widest animate-pulse drop-shadow-md">Memproses Absen...</h2>
+      <p className="text-slate-300 text-sm mt-2 drop-shadow-md">Mengirim data dan lokasi Anda ke server.</p>
+    </div>,
+    document.body
+  ) : null;
+
+  // =====================================
   // UI UTAMA
   // =====================================
   return (
     <div className="min-h-screen bg-slate-50 py-10 animate-fade-in-up">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         
-        <button onClick={() => { stopCamera(); onBack(); }} className="group flex items-center gap-2 mb-8 text-slate-500 hover:text-slate-800 transition-colors font-medium">
+        {/* Tombol Kembali Utama */}
+        <button onClick={onBack} className="group flex items-center gap-2 mb-8 text-slate-500 hover:text-slate-800 transition-colors font-medium">
           <svg className="w-5 h-5 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           Kembali
         </button>
 
         {/* =========================================================
-            KAMERA PHOTOBOOTH OVERLAY
+            HEADER & GRID CARD ABSENSI (Selalu di-render di background)
             ========================================================= */}
-        {isCameraActive && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in">
-            <div className="absolute top-6 left-6 text-white font-bold bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-white/30 uppercase tracking-widest text-sm">
-              Absen {activeType}
-            </div>
-            <button onClick={stopCamera} className="absolute top-6 right-6 text-white bg-white/20 hover:bg-rose-500 p-3 rounded-full backdrop-blur-sm transition-all duration-300">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-
-            <div className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/20">
-              
-              {/* VIDEO PREVIEW DENGAN FILTER ESTETIK & VIGNETTE OVERLAY */}
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className="w-full h-full object-cover scale-x-[-1]" 
-                style={{ filter: 'blur(0.8px) brightness(1.1) contrast(1.05) saturate(1.1)' }}
-              />
-              
-              {/* Efek Vignette di UI (Gelap di pojokan frame) */}
-              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]"></div>
-              
-              {/* Overlay Watermark (UI Preview) */}
-              <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-white shadow-lg">
-                <div className="mb-2">
-                   <img src="https://i.ibb.co.com/nqSwPcP9/LOGO-PANJANG-PNG.png" alt="Logo RS" className="h-8 object-contain" />
-                </div>
-                <div className="text-xs text-slate-300 mb-1">{dateString}</div>
-                <div className="text-base font-bold text-white mb-2">{timeString}</div>
-                <div className="inline-block bg-emerald-500/30 text-emerald-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-emerald-500/50">
-                  ABSEN: {activeType}
-                </div>
-              </div>
-
-              {/* Bracket Scanner Tengah */}
-              <div className="absolute inset-0 pointer-events-none p-6 opacity-40">
-                <div className="w-full h-full relative border-2 border-white/30 rounded-3xl">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 border-4 border-white/50 rounded-full"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tombol Jepret */}
-            <div className="mt-8 flex flex-col items-center">
-              <button onClick={capturePhoto} className="relative flex items-center justify-center w-20 h-20 rounded-full border-[4px] border-white/80 hover:border-emerald-400 transition-colors duration-300 group focus:outline-none">
-                <div className="w-16 h-16 bg-white rounded-full transition-all duration-200 transform group-hover:scale-90 group-active:scale-75 shadow-[0_0_20px_rgba(255,255,255,0.5)]"></div>
-              </button>
-              <p className="mt-4 text-white/80 font-bold tracking-widest uppercase text-[10px] animate-pulse">Ketuk Untuk Jepret</p>
-            </div>
-            
-            <canvas ref={canvasRef} className="hidden" />
+        <div className="mb-12 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-800 text-white rounded-2xl shadow-lg mb-6 transform -rotate-3">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </div>
-        )}
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 tracking-tight mb-4">Absensi Kamera</h1>
+          <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+            Silakan pilih tipe absensi Anda. Sistem akan mencatat waktu dan menyematkan <i>watermark</i> keamanan otomatis pada foto Anda.
+          </p>
+        </div>
 
-        {/* =========================================================
-            PREVIEW HASIL FOTO SEBELUM SUBMIT
-            ========================================================= */}
-        {capturedPhoto && !isSuccess && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in p-6">
-            <h2 className="text-white text-2xl font-bold mb-6">Preview Absensi</h2>
-            <div className="relative max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white/10 mb-8">
-              <img src={capturedPhoto} alt="Hasil Absen" className="w-full h-auto object-cover" />
-            </div>
-            <div className="flex gap-4 w-full max-w-sm">
-              <button onClick={() => startCamera(activeType)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl hover:bg-slate-600 transition-colors">
-                Foto Ulang
-              </button>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
-                {isSubmitting ? 'Loading...' : 'Kirim Absen'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* HEADER & GRID CARD */}
-        {!isCameraActive && !capturedPhoto && (
-          <>
-            <div className="mb-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-800 text-white rounded-2xl shadow-lg mb-6 transform -rotate-3">
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {absenCards.map((card) => (
+            <div 
+              key={card.id}
+              onClick={() => handleCardClick(card.id)}
+              className={`relative overflow-hidden group flex flex-col bg-white rounded-3xl p-6 sm:p-8 shadow-sm hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border-2 border-slate-100 hover:border-${card.color}-300 cursor-pointer`}
+            >
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 bg-${card.color}-50 text-${card.color}-600 group-hover:bg-${card.color}-500 group-hover:text-white transition-colors duration-300`}>
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
+                </svg>
               </div>
-              <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 tracking-tight mb-4">Absensi Kamera</h1>
-              <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-                Silakan pilih tipe absensi Anda. Sistem akan mencatat waktu dan menyematkan <i>watermark</i> keamanan otomatis pada foto Anda.
-              </p>
+              <h3 className={`text-xl font-bold text-slate-800 mb-2 group-hover:text-${card.color}-600 transition-colors`}>{card.title}</h3>
+              <p className="text-slate-500 text-sm mb-6 flex-grow">{card.desc}</p>
+              
+              <div className={`mt-auto inline-flex items-center text-sm font-bold text-${card.color}-600`}>
+                Jepret Sekarang
+                <svg className="w-4 h-4 ml-1 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+              </div>
             </div>
+          ))}
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {absenCards.map((card) => (
-                <div 
-                  key={card.id}
-                  onClick={() => startCamera(card.id)}
-                  className={`relative overflow-hidden group flex flex-col bg-white rounded-3xl p-6 sm:p-8 shadow-sm hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border-2 border-slate-100 hover:border-${card.color}-300 cursor-pointer`}
-                >
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 bg-${card.color}-50 text-${card.color}-600 group-hover:bg-${card.color}-500 group-hover:text-white transition-colors duration-300`}>
-                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
-                    </svg>
-                  </div>
-                  <h3 className={`text-xl font-bold text-slate-800 mb-2 group-hover:text-${card.color}-600 transition-colors`}>{card.title}</h3>
-                  <p className="text-slate-500 text-sm mb-6 flex-grow">{card.desc}</p>
-                  
-                  <div className={`mt-auto inline-flex items-center text-sm font-bold text-${card.color}-600`}>
-                    Jepret Sekarang
-                    <svg className="w-4 h-4 ml-1 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+        {/* PANGGIL KOMPONEN KAMERA SAKTI */}
+        <CameraPopup 
+          isOpen={isCameraOpen}
+          onClose={() => setIsCameraOpen(false)}
+          onCapture={handleCapture}
+          title={`Absen ${activeType || ''}`}
+          statusText={`STATUS: ABSEN ${activeType?.toUpperCase() || ''}`}
+          defaultFacingMode="user" 
+        />
+
+        {/* RENDER PORTAL OVERLAY */}
+        {previewOverlay}
+        {loadingOverlay}
 
       </div>
     </div>
